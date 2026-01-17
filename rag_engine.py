@@ -1,102 +1,69 @@
 import pandas as pd
-import numpy as np
-import faiss
-import pickle
 import os
 from openai import OpenAI
-from sentence_transformers import SentenceTransformer
 import config
 
 # Initialize OpenRouter Client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=config.OPENROUTER_API_KEY,
+    timeout=30.0, # Production timeout
 )
 
-# Load Embedding Model (Local for fast vector search)
-# We'll use a small, efficient model to build the index locally
-embed_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-
-def load_knowledge_base():
+def load_all_knowledge():
     """
-    Reads all sheets from Excel and extracts text.
+    Reads all sheets from Excel and returns a single combined string.
+    Optimized for files < 1MB to avoid heavy vector databases.
     """
     if not os.path.exists(config.DATABASE_PATH):
-        return []
+        return "База знаний пуста."
 
-    xl = pd.ExcelFile(config.DATABASE_PATH)
-    knowledge_base = []
+    try:
+        xl = pd.ExcelFile(config.DATABASE_PATH)
+        full_text = ""
+        for sheet_name in xl.sheet_names:
+            df = pd.read_excel(config.DATABASE_PATH, sheet_name=sheet_name)
+            sheet_content = f"\n--- РАЗДЕЛ: {sheet_name} ---\n"
+            # Combine all non-empty rows into text
+            for _, row in df.iterrows():
+                row_text = " ".join([str(val) for val in row.values if pd.notna(val)]).strip()
+                if len(row_text) > 5:
+                    sheet_content += row_text + "\n"
+            full_text += sheet_content
+        return full_text
+    except Exception as e:
+        return f"Ошибка при чтении базы: {e}"
 
-    for sheet_name in xl.sheet_names:
-        df = pd.read_excel(config.DATABASE_PATH, sheet_name=sheet_name)
-        
-        # General extraction: combine all non-empty cell values into strings per row
-        for _, row in df.iterrows():
-            content = " ".join([str(val) for val in row.values if pd.notna(val)]).strip()
-            if len(content) > 10:
-                knowledge_base.append({
-                    "content": content,
-                    "source": sheet_name
-                })
-    
-    return knowledge_base
+# Global cache for the knowledge base text
+_KNOWLEDGE_CACHE = None
 
-def build_index(kb):
-    """
-    Builds FAISS index for the knowledge base.
-    """
-    texts = [item['content'] for item in kb]
-    embeddings = embed_model.encode(texts)
-    
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(np.array(embeddings).astype('float32'))
-    
-    # Save index and KB
-    faiss.write_index(index, config.FAISS_INDEX_PATH)
-    with open(config.KNOWLEDGE_BASE_PKL, 'wb') as f:
-        pickle.dump(kb, f)
+def reset_cache():
+    global _KNOWLEDGE_CACHE
+    _KNOWLEDGE_CACHE = None
 
-def get_context(query, top_k=3):
-    """
-    Retrieves most relevant chunks from FAISS index.
-    """
-    if not os.path.exists(config.FAISS_INDEX_PATH):
-        kb = load_knowledge_base()
-        build_index(kb)
-    else:
-        with open(config.KNOWLEDGE_BASE_PKL, 'rb') as f:
-            kb = pickle.dump(kb, f) # Error here, should be load. Let me fix in next tool.
-            
-    # Load if not already
-    index = faiss.read_index(config.FAISS_INDEX_PATH)
-    with open(config.KNOWLEDGE_BASE_PKL, 'rb') as f:
-        kb = pickle.load(f)
-
-    query_embedding = embed_model.encode([query])
-    distances, indices = index.search(np.array(query_embedding).astype('float32'), top_k)
-    
-    context = ""
-    for idx in indices[0]:
-        if idx != -1:
-            context += f"- {kb[idx]['content']}\n"
-    
-    return context
+def get_context():
+    global _KNOWLEDGE_CACHE
+    if _KNOWLEDGE_CACHE is None:
+        _KNOWLEDGE_CACHE = load_all_knowledge()
+    return _KNOWLEDGE_CACHE
 
 def ask_gemini(question):
     """
-    Sends question with context to OpenRouter (Gemini).
+    Sends question with the FULL context to Gemini.
+    Gemini 1.5 Flash easily handles the entire 60KB Excel file in the prompt.
     """
-    context = get_context(question)
+    context = get_context()
     
     prompt = f"""
-Ты — «HR-бот», профессиональный и дружелюбный ассистент отдела кадров. Твоя задача — помогать сотрудникам находить информацию в базе знаний компании.
-Твои правила:
-1. Используй ТОЛЬКО предоставленный ниже контекст для ответа.
-2. Если в контексте нет ответа, вежливо скажи, что не обладаешь этой информацией и предложи обратиться в HR напрямую.
-3. Всегда указывай ссылки на документы, если они есть в контексте.
+Ты — «HR-бот», профессиональный и дружелюбный ассистент отдела кадров. Твоя задача — помогать сотрудникам находить информацию в предоставленной базе знаний.
 
-Контекст:
+Твои правила:
+1. Используй ТОЛЬКО тот фрагмент текста из базы знаний, который ПРЯМО относится к вопросу пользователя.
+2. НЕ добавляй общую справочную информацию или ссылки на папки (например, пути на диске U:), если они не указаны в базе именно для этого конкретного вопроса.
+3. Если в контексте нет прямого ответа, вежливо скажи, что не обладаешь этой информацией.
+4. Ответ должен быть кратким и четким, без лишних «полезных» дополнений от себя.
+
+Контекст базы знаний:
 {context}
 
 Вопрос пользователя: {question}
@@ -105,7 +72,7 @@ def ask_gemini(question):
     try:
         completion = client.chat.completions.create(
             extra_headers={
-                "HTTP-Referer": "https://railway.app", # Optional for OpenRouter
+                "HTTP-Referer": "https://railway.app",
                 "X-Title": "HR Assistant Bot",
             },
             model=config.OPENROUTER_MODEL,
