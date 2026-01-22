@@ -5,8 +5,9 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 import config
-from rag_engine import ask_gemini
+from rag_engine import ask_gemini, get_categories
 
 import rag_engine
 
@@ -22,18 +23,34 @@ logging.basicConfig(
 bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
 
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-
 # ThreadPool for non-blocking LLM calls
 executor = ThreadPoolExecutor(max_workers=10)
 
-# Topics for quick access
-QUICK_TOPICS = {
-    "📅 Отпуск": "Как оформить отпуск?",
-    "💰 Зарплата": "Когда придет зарплата?",
-    "📄 Документы": "Где найти шаблоны заявлений?",
-    "🏥 Больничный": "Как закрыть больничный?",
+# Emojis for categories
+CATEGORY_EMOJIS = {
+    "1. О Ферсол": "🏢",
+    "2. О зарплате": "💰",
+    "3. Испытательный срок": "⏳",
+    "4. ДМС и НС": "🏥",
+    "5. Отпуск и больничный": "📅",
+    "6. Печать документов": "🖨️",
+    "7. Удаленный доступ": "💻",
+    "8. Как закрыть офис": "🔑",
+    "9. Политики и заявления": "📄"
 }
+
+def get_main_menu_keyboard():
+    builder = ReplyKeyboardBuilder()
+    categories = get_categories()
+    for cat in categories:
+        emoji = ""
+        for key, val in CATEGORY_EMOJIS.items():
+            if key in cat or cat in key:
+                emoji = val + " "
+                break
+        builder.button(text=f"{emoji}{cat}")
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)
 
 # Simple Rate Limiting Middleware
 class RateLimitMiddleware(BaseMiddleware):
@@ -63,14 +80,6 @@ class RateLimitMiddleware(BaseMiddleware):
 # Register Middleware
 dp.message.middleware(RateLimitMiddleware())
 
-def get_start_keyboard():
-    builder = InlineKeyboardBuilder()
-    for text in QUICK_TOPICS.keys():
-        builder.button(text=text, callback_data=f"topic_{text}")
-    builder.button(text="👤 Связаться с HR", callback_data="contact_hr")
-    builder.adjust(2)
-    return builder.as_markup()
-
 def get_feedback_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="👍 Помогло", callback_data="feedback_up")
@@ -82,17 +91,25 @@ def get_feedback_keyboard():
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     await message.answer(
-        f"👋 Привет, {message.from_user.first_name}! Я твой HR-ассистент.\n\n"
-        "Я помогу найти информацию по регламентам, процедурам и документам компании.\n"
-        "Выбери тему ниже или просто задай мне вопрос.",
-        reply_markup=get_start_keyboard()
+        f"👋 Привет, {message.from_user.first_name}! Я твой HR-ассистент в компании **Fersol**.\n\n"
+        "Я помогу тебе найти информацию о регламентах, процедурах и корпоративных политиках.\n\n"
+        "**Как я могу помочь:**\n"
+        "1. Выбери интересующий раздел в меню ниже.\n"
+        "2. Или просто напиши свой вопрос текстом (например: 'Как оформить отпуск?').\n\n"
+        "Что тебя интересует сейчас?",
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode="Markdown"
     )
+
+@dp.message(F.text.lower().in_(["привет", "здравствуй", "здравствуйте", "hi", "hello", "меню", "start"]))
+async def greeting_handler(message: types.Message):
+    await start_handler(message)
 
 @dp.message(Command("reload"))
 async def reload_handler(message: types.Message):
     if str(message.from_user.id) == config.ADMIN_ID:
         rag_engine.reset_cache()
-        await message.answer("✅ База знаний успешно перезагружена!")
+        await message.answer("✅ База знаний успешно перезагружена!", reply_markup=get_main_menu_keyboard())
     else:
         await message.answer("⚠️ У вас нет прав для выполнения этой команды.")
 
@@ -100,24 +117,12 @@ async def reload_handler(message: types.Message):
 async def help_handler(message: types.Message):
     await message.answer(
         "❓ **Как пользоваться ботом:**\n\n"
-        "1. Просто напиши свой вопрос текстом.\n"
-        "2. Используй кнопки под сообщением /start для быстрого доступа.\n"
-        "3. Если бот не нашел ответ, нажми 'Связаться с HR'.\n\n"
-        "Я ищу информацию только в официальной базе знаний компании."
+        "1. Используйте кнопки меню для навигации по разделам.\n"
+        "2. Задавайте вопросы в свободной форме.\n"
+        "3. Если бот не нашел ответ, используйте кнопку 'Спросить HR' под сообщением.\n\n"
+        "Я черпаю информацию только из официальной базы знаний Fersol.",
+        parse_mode="Markdown"
     )
-
-@dp.callback_query(F.data.startswith("topic_"))
-async def topic_callback_handler(callback: types.CallbackQuery):
-    topic_text = callback.data.replace("topic_", "")
-    query = QUICK_TOPICS.get(topic_text)
-    if query:
-        await callback.message.answer(f"🔍 Ищу ответ на вопрос: *{query}*", parse_mode="Markdown")
-        # Simulating a message for chat_handler logic
-        dummy_message = callback.message
-        dummy_message.text = query
-        dummy_message.from_user = callback.from_user
-        await chat_handler(dummy_message)
-    await callback.answer()
 
 @dp.callback_query(F.data == "contact_hr")
 async def contact_hr_handler(callback: types.CallbackQuery):
@@ -151,9 +156,19 @@ async def chat_handler(message: types.Message):
     
     user_query = message.text
     
+    # Check if the query is a category button click (removing emoji if present)
+    clean_query = user_query
+    for emoji in CATEGORY_EMOJIS.values():
+        clean_query = clean_query.replace(emoji, "").strip()
+    
+    # If it's a category, we might want a slightly different prompt to LLM
+    prompt_query = user_query
+    if clean_query in get_categories():
+        prompt_query = f"Расскажи кратко, что содержится в разделе '{clean_query}' и какие основные вопросы он охватывает?"
+
     # Run synchronous LLM call in a thread pool to avoid blocking the bot
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(executor, ask_gemini, user_query)
+    response = await loop.run_in_executor(executor, ask_gemini, prompt_query)
     
     # Send answer to user
     try:

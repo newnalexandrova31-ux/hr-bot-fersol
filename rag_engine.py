@@ -41,6 +41,21 @@ def reset_cache():
     global _KNOWLEDGE_CACHE
     _KNOWLEDGE_CACHE = None
 
+def get_categories():
+    """Returns a list of cleaned sheet names from the Excel database."""
+    if not os.path.exists(config.DATABASE_PATH):
+        return []
+    try:
+        xl = pd.ExcelFile(config.DATABASE_PATH)
+        categories = []
+        for name in xl.sheet_names:
+            # Clean up tab characters and other artifacts
+            clean_name = name.replace("_x0009_", " ").replace("\xa0", " ").strip()
+            categories.append(clean_name)
+        return categories
+    except Exception:
+        return []
+
 def get_context():
     global _KNOWLEDGE_CACHE
     if _KNOWLEDGE_CACHE is None:
