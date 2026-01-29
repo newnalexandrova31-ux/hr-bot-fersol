@@ -40,7 +40,7 @@ CATEGORY_EMOJIS = {
 }
 
 def get_main_menu_keyboard():
-    builder = ReplyKeyboardBuilder()
+    builder = InlineKeyboardBuilder()
     categories = get_categories()
     for cat in categories:
         emoji = ""
@@ -48,9 +48,19 @@ def get_main_menu_keyboard():
             if key in cat or cat in key:
                 emoji = val + " "
                 break
-        builder.button(text=f"{emoji}{cat}")
-    builder.adjust(2)
-    return builder.as_markup(resize_keyboard=True)
+        # Используем callback_data вместо текста
+        builder.button(text=f"{emoji}{cat}", callback_data=f"cat_{cat}")
+    builder.adjust(1) # Инлайн кнопки лучше смотрятся в один столбец, если названия длинные
+    return builder.as_markup()
+
+def get_fersol_submenu():
+    subcats = get_subcategories("1. О Ферсол")
+    builder = InlineKeyboardBuilder()
+    for sub in subcats:
+        builder.button(text=sub, callback_data=f"sub_{sub}")
+    builder.button(text="🔙 Назад в меню", callback_data="back_to_main")
+    builder.adjust(1)
+    return builder.as_markup()
 
 # Simple Rate Limiting Middleware
 class RateLimitMiddleware(BaseMiddleware):
@@ -149,24 +159,66 @@ async def feedback_handler(callback: types.CallbackQuery):
             pass
     await callback.answer()
 
+@dp.callback_query(F.data == "back_to_main")
+async def back_to_main_handler(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "Что тебя интересует сейчас?",
+        reply_markup=get_main_menu_keyboard()
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("cat_"))
+async def category_callback_handler(callback: types.CallbackQuery):
+    category = callback.data.replace("cat_", "")
+    
+    if "1. О Ферсол" in category:
+        await callback.message.edit_text(
+            "📂 Выберите интересующий подраздел:",
+            reply_markup=get_fersol_submenu()
+        )
+    else:
+        # Для остальных категорий запрашиваем краткое описание у ИИ
+        prompt = f"Расскажи кратко, что содержится в разделе '{category}' и какие основные вопросы он охватывает?"
+        await callback.message.edit_text("⏳ Загружаю информацию...")
+        
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(executor, ask_gemini, prompt)
+        
+        try:
+            await callback.message.edit_text(response, parse_mode="Markdown", reply_markup=get_feedback_keyboard())
+        except Exception:
+            await callback.message.edit_text(response, reply_markup=get_feedback_keyboard())
+            
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("sub_"))
+async def subcategory_callback_handler(callback: types.CallbackQuery):
+    subcategory = callback.data.replace("sub_", "")
+    await callback.message.edit_text(f"⏳ Ищу информацию по теме: {subcategory}...")
+    
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(executor, ask_gemini, subcategory)
+    
+    # Для подразделов "О Ферсол" не показываем кнопки фидбека по просьбе пользователя
+    try:
+        await callback.message.edit_text(response, parse_mode="Markdown")
+    except Exception:
+        await callback.message.edit_text(response)
+    
+    # Добавляем кнопку возврата в меню после ответа
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔙 Назад в меню", callback_data="back_to_main")
+    await callback.message.answer("Вы можете вернуться в главное меню или задать другой вопрос:", reply_markup=builder.as_markup())
+    
+    await callback.answer()
+
 @dp.message(F.text == "🔙 Назад")
 async def back_handler(message: types.Message):
     await start_handler(message)
 
 @dp.message(lambda msg: "1. О Ферсол" in msg.text)
 async def fersol_menu_handler(message: types.Message):
-    subcats = get_subcategories("1. О Ферсол")
-    if not subcats:
-        await chat_handler(message)
-        return
-
-    builder = ReplyKeyboardBuilder()
-    for sub in subcats:
-        builder.button(text=sub)
-    builder.button(text="🔙 Назад")
-    builder.adjust(1)
-    
-    await message.answer("📂 Выберите интересующий подраздел:", reply_markup=builder.as_markup(resize_keyboard=True))
+    await message.answer("📂 Выберите интересующий подраздел:", reply_markup=get_fersol_submenu())
 
 @dp.message(F.text)
 async def chat_handler(message: types.Message):
@@ -175,36 +227,16 @@ async def chat_handler(message: types.Message):
     
     user_query = message.text
     
-    # Check if the query is a category button click (removing emoji if present)
-    clean_query = user_query
-    for emoji in CATEGORY_EMOJIS.values():
-        clean_query = clean_query.replace(emoji, "").strip()
-    
-    # If it's a category, we might want a slightly different prompt to LLM
-    prompt_query = user_query
-    if clean_query in get_categories():
-        prompt_query = f"Расскажи кратко, что содержится в разделе '{clean_query}' и какие основные вопросы он охватывает?"
-
     # Run synchronous LLM call in a thread pool to avoid blocking the bot
     loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(executor, ask_gemini, prompt_query)
+    response = await loop.run_in_executor(executor, ask_gemini, user_query)
     
-    # Determine if we should show feedback buttons
-    # User requested no buttons for "О Ферсол" subsections
-    show_feedback = True
-    subcats_fersol = get_subcategories("1. О Ферсол")
-    # Fuzzy match or exact match? The button text matches exactly the subcat title.
-    if clean_query in subcats_fersol:
-        show_feedback = False
-
     # Send answer to user
-    reply_markup = get_feedback_keyboard() if show_feedback else None
-    
     try:
-        await message.reply(response, parse_mode="Markdown", reply_markup=reply_markup)
+        await message.reply(response, parse_mode="Markdown", reply_markup=get_feedback_keyboard())
     except Exception as e:
         logging.error(f"Markdown parsing failed: {e}. Sending plain text.")
-        await message.reply(response, reply_markup=reply_markup) # Fallback to plain text
+        await message.reply(response, reply_markup=get_feedback_keyboard()) # Fallback to plain text
     
     # Log to Admin
     if config.ADMIN_ID:
