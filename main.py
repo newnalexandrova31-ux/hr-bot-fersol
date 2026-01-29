@@ -231,12 +231,24 @@ async def chat_handler(message: types.Message):
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(executor, ask_gemini, user_query)
     
+    # Проверяем, содержит ли ответ фразу о нехватке информации
+    no_info_msg = "К сожалению, у меня нет информации по этому вопросу в базе знаний"
+    reply_markup = get_feedback_keyboard()
+    
+    if no_info_msg in response:
+        # Если информации нет, добавляем инлайн-кнопку для прямой связи с HR
+        builder = InlineKeyboardBuilder()
+        builder.button(text="👤 Связаться с HR", callback_data="contact_hr")
+        builder.button(text="🔙 В главное меню", callback_data="back_to_main")
+        builder.adjust(1)
+        reply_markup = builder.as_markup()
+
     # Send answer to user
     try:
-        await message.reply(response, parse_mode="Markdown", reply_markup=get_feedback_keyboard())
+        await message.reply(response, parse_mode="Markdown", reply_markup=reply_markup)
     except Exception as e:
         logging.error(f"Markdown parsing failed: {e}. Sending plain text.")
-        await message.reply(response, reply_markup=get_feedback_keyboard()) # Fallback to plain text
+        await message.reply(response, reply_markup=reply_markup) # Fallback to plain text
     
     # Log to Admin
     if config.ADMIN_ID:
