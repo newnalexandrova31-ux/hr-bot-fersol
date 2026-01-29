@@ -123,6 +123,50 @@ async def reload_handler(message: types.Message):
     else:
         await message.answer("⚠️ У вас нет прав для выполнения этой команды.")
 
+@dp.message(Command("models"))
+async def models_handler(message: types.Message):
+    if str(message.from_user.id) != config.ADMIN_ID:
+        await message.answer("⚠️ У вас нет прав для выполнения этой команды.")
+        return
+
+    builder = InlineKeyboardBuilder()
+    for name, model_id in config.AVAILABLE_MODELS.items():
+        # Отмечаем текущую модель
+        prefix = "✅ " if config.OPENROUTER_MODEL == model_id else ""
+        builder.button(text=f"{prefix}{name}", callback_data=f"setmodel_{model_id}")
+    
+    builder.adjust(1)
+    await message.answer(
+        f"🤖 **Текущая модель:** `{config.OPENROUTER_MODEL}`\n\n"
+        "Выберите модель для переключения:",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
+    )
+
+@dp.callback_query(F.data.startswith("setmodel_"))
+async def set_model_callback(callback: types.CallbackQuery):
+    if str(callback.from_user.id) != config.ADMIN_ID:
+        await callback.answer("⚠️ Доступ запрещен", show_alert=True)
+        return
+
+    new_model = callback.data.replace("setmodel_", "")
+    config.OPENROUTER_MODEL = new_model
+    
+    # Обновляем сообщение с кнопками
+    builder = InlineKeyboardBuilder()
+    for name, model_id in config.AVAILABLE_MODELS.items():
+        prefix = "✅ " if config.OPENROUTER_MODEL == model_id else ""
+        builder.button(text=f"{prefix}{name}", callback_data=f"setmodel_{model_id}")
+    builder.adjust(1)
+    
+    await callback.message.edit_text(
+        f"✅ **Модель успешно изменена!**\n\n"
+        f"Текущая модель: `{config.OPENROUTER_MODEL}`",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown"
+    )
+    await callback.answer(f"Модель изменена на {new_model}")
+
 @dp.message(Command("help"))
 async def help_handler(message: types.Message):
     await message.answer(
