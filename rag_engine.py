@@ -56,6 +56,45 @@ def get_categories():
     except Exception:
         return []
 
+import re
+
+def get_subcategories(sheet_name_partial):
+    """Returns a list of subcategories from a specific sheet based on numbering pattern (e.g. 1.1.)."""
+    if not os.path.exists(config.DATABASE_PATH):
+        return []
+    try:
+        xl = pd.ExcelFile(config.DATABASE_PATH)
+        # Find exact sheet name
+        target_sheet = None
+        for name in xl.sheet_names:
+            # Clean name for comparison
+            clean_name = name.replace("_x0009_", " ").replace("\xa0", " ").strip()
+            if sheet_name_partial in clean_name or sheet_name_partial in name:
+                target_sheet = name
+                break
+        
+        if not target_sheet:
+            return []
+
+        df = pd.read_excel(config.DATABASE_PATH, sheet_name=target_sheet, header=None)
+        
+        # Look for pattern "X.Y." in column 0
+        subcategories = []
+        for idx, row in df.iterrows():
+            col0 = str(row[0])
+            col1 = str(row[1])
+            
+            # Check if col0 looks like "1.1." or "1.2."
+            # Also handle cases where it might be read as float (1.1)
+            if re.match(r'^\d+\.\d+\.?$', col0):
+                if col1 and col1.lower() != 'nan':
+                     subcategories.append(col1.strip())
+        
+        return subcategories
+    except Exception as e:
+        print(f"Error getting subcategories: {e}")
+        return []
+
 def get_context():
     global _KNOWLEDGE_CACHE
     if _KNOWLEDGE_CACHE is None:
@@ -77,6 +116,7 @@ def ask_gemini(question):
 2. НЕ добавляй общую справочную информацию или ссылки на папки (например, пути на диске U:), если они не указаны в базе именно для этого конкретного вопроса.
 3. Если в контексте нет прямого ответа, вежливо скажи, что не обладаешь этой информацией.
 4. Ответ должен быть кратким и четким, без лишних «полезных» дополнений от себя.
+5. НЕ используй маркированные списки (точки, нумерацию) в тексте ответа. Пиши связным текстом, разделяя мысли абзацами.
 
 Контекст базы знаний:
 {context}

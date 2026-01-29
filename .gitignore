@@ -1,8 +1,5 @@
+*.log
 .env
 __pycache__/
 *.pyc
-faiss_index.bin
-knowledge_base.pkl
-.vscode/
-venv/
-node_modules/
+.DS_Store

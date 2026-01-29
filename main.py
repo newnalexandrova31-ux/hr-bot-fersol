@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 import config
-from rag_engine import ask_gemini, get_categories
+from rag_engine import ask_gemini, get_categories, get_subcategories
 
 import rag_engine
 
@@ -88,6 +88,10 @@ def get_feedback_keyboard():
     builder.adjust(2)
     return builder.as_markup()
 
+@dp.message(F.text.lower().in_(["привет", "здравствуй", "здравствуйте", "hi", "hello", "меню", "start", "/start"]))
+async def greeting_handler(message: types.Message):
+    await start_handler(message)
+
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     await message.answer(
@@ -100,10 +104,6 @@ async def start_handler(message: types.Message):
         reply_markup=get_main_menu_keyboard(),
         parse_mode="Markdown"
     )
-
-@dp.message(F.text.lower().in_(["привет", "здравствуй", "здравствуйте", "hi", "hello", "меню", "start"]))
-async def greeting_handler(message: types.Message):
-    await start_handler(message)
 
 @dp.message(Command("reload"))
 async def reload_handler(message: types.Message):
@@ -149,6 +149,25 @@ async def feedback_handler(callback: types.CallbackQuery):
             pass
     await callback.answer()
 
+@dp.message(F.text == "🔙 Назад")
+async def back_handler(message: types.Message):
+    await start_handler(message)
+
+@dp.message(lambda msg: "1. О Ферсол" in msg.text)
+async def fersol_menu_handler(message: types.Message):
+    subcats = get_subcategories("1. О Ферсол")
+    if not subcats:
+        await chat_handler(message)
+        return
+
+    builder = ReplyKeyboardBuilder()
+    for sub in subcats:
+        builder.button(text=sub)
+    builder.button(text="🔙 Назад")
+    builder.adjust(1)
+    
+    await message.answer("📂 Выберите интересующий подраздел:", reply_markup=builder.as_markup(resize_keyboard=True))
+
 @dp.message(F.text)
 async def chat_handler(message: types.Message):
     # Show typing status
@@ -170,12 +189,22 @@ async def chat_handler(message: types.Message):
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(executor, ask_gemini, prompt_query)
     
+    # Determine if we should show feedback buttons
+    # User requested no buttons for "О Ферсол" subsections
+    show_feedback = True
+    subcats_fersol = get_subcategories("1. О Ферсол")
+    # Fuzzy match or exact match? The button text matches exactly the subcat title.
+    if clean_query in subcats_fersol:
+        show_feedback = False
+
     # Send answer to user
+    reply_markup = get_feedback_keyboard() if show_feedback else None
+    
     try:
-        await message.reply(response, parse_mode="Markdown", reply_markup=get_feedback_keyboard())
+        await message.reply(response, parse_mode="Markdown", reply_markup=reply_markup)
     except Exception as e:
         logging.error(f"Markdown parsing failed: {e}. Sending plain text.")
-        await message.reply(response, reply_markup=get_feedback_keyboard()) # Fallback to plain text
+        await message.reply(response, reply_markup=reply_markup) # Fallback to plain text
     
     # Log to Admin
     if config.ADMIN_ID:
