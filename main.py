@@ -174,7 +174,7 @@ async def category_callback_handler(callback: types.CallbackQuery):
         )
     else:
         # Для остальных категорий запрашиваем краткое описание у ИИ
-        prompt = f"Расскажи кратко, что содержится в разделе '{category}' и какие основные вопросы он охватывает?"
+        prompt = f"Расскажи мне подробно про '{category}' как сотруднику. Какие здесь действуют правила и процедуры?"
         await callback.message.edit_text("⏳ Загружаю информацию...")
         
         loop = asyncio.get_event_loop()
