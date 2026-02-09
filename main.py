@@ -228,7 +228,7 @@ async def chat_handler(message: types.Message):
     response = await loop.run_in_executor(executor, ask_gemini, user_query)
     
     # Проверяем, содержит ли ответ фразу о нехватке информации
-    no_info_msg = "К сожалению, у меня нет информации по этому вопросу в базе знаний"
+    no_info_msg = "К сожалению, у меня нет информации по этому вопросу"
     reply_markup = get_feedback_keyboard()
     
     if no_info_msg in response:
