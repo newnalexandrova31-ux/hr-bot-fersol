@@ -132,6 +132,7 @@ async def help_handler(message: types.Message):
 
 @dp.callback_query(F.data == "contact_hr")
 async def contact_hr_handler(callback: types.CallbackQuery):
+    await callback.message.edit_reply_markup(reply_markup=None) # Удаляем кнопки, чтобы не нажимали повторно
     await callback.message.answer(
         "📧 Для связи с HR-отделом напишите на почту: `hr@fersol.ru`\n"
         "Или обратитесь к Татьяне Супониной через личные сообщения."
@@ -141,8 +142,7 @@ async def contact_hr_handler(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("feedback_"))
 async def feedback_handler(callback: types.CallbackQuery):
     feedback = "положительный" if "up" in callback.data else "отрицательный"
-    await callback.message.edit_reply_markup(reply_markup=None) # Remove buttons
-    await callback.message.answer(f"🙏 Спасибо за ваш {feedback} отзыв! Это помогает мне становиться лучше.")
+    await callback.message.edit_reply_markup(reply_markup=None) # Удаляем кнопки
     
     # Log feedback to admin
     if config.ADMIN_ID:
@@ -153,7 +153,12 @@ async def feedback_handler(callback: types.CallbackQuery):
             )
         except Exception:
             pass
-    await callback.answer()
+            
+    # Используем всплывающее уведомление вместо нового сообщения
+    await callback.answer(
+        f"🙏 Спасибо за ваш {feedback} отзыв! Это помогает мне становиться лучше.",
+        show_alert=False
+    )
 
 @dp.callback_query(F.data == "back_to_main")
 async def back_to_main_handler(callback: types.CallbackQuery):
