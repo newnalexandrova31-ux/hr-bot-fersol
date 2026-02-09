@@ -98,19 +98,15 @@ def get_feedback_keyboard():
     builder.adjust(2)
     return builder.as_markup()
 
-@dp.message(F.text.lower().in_(["привет", "здравствуй", "здравствуйте", "hi", "hello", "меню", "start", "/start"]))
+@dp.message(F.text.regexp(r"(?i)^(привет|здравствуй|hello|hi|меню|start)"))
 async def greeting_handler(message: types.Message):
     await start_handler(message)
 
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     await message.answer(
-        f"👋 Привет, {message.from_user.first_name}! Я твой HR-ассистент в компании **Fersol**.\n\n"
-        "Я помогу тебе найти информацию о регламентах, процедурах и корпоративных политиках.\n\n"
-        "**Как я могу помочь:**\n"
-        "1. Выбери интересующий раздел в меню ниже.\n"
-        "2. Или просто напиши свой вопрос текстом (например: 'Как оформить отпуск?').\n\n"
-        "Что тебя интересует сейчас?",
+        f"👋 Привет, {message.from_user.first_name}!\n\n"
+        "Я — виртуальный ассистент компании Fersol и готов предоставить информацию по меню ниже.",
         reply_markup=get_main_menu_keyboard(),
         parse_mode="Markdown"
     )
