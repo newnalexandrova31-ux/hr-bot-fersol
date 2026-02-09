@@ -133,8 +133,8 @@ async def help_handler(message: types.Message):
 @dp.callback_query(F.data == "contact_hr")
 async def contact_hr_handler(callback: types.CallbackQuery):
     await callback.message.answer(
-        "📧 Для связи с HR-отделом напишите на почту: `hr@fersol.org`\n"
-        "Или обратитесь к Наталье Александровой через личные сообщения."
+        "📧 Для связи с HR-отделом напишите на почту: `hr@fersol.ru`\n"
+        "Или обратитесь к Татьяне Супониной через личные сообщения."
     )
     await callback.answer()
 
