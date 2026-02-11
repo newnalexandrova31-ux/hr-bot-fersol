@@ -143,6 +143,7 @@ def ask_gemini(question):
                 {"role": "user", "content": prompt}
             ]
         )
-        return completion.choices[0].message.content
+        response_text = completion.choices[0].message.content
+        return clean_markdown_formatting(response_text)
     except Exception as e:
         return f"Ошибка при обращении к ИИ: {e}"
