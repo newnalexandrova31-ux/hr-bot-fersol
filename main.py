@@ -237,12 +237,8 @@ async def chat_handler(message: types.Message):
     reply_markup = get_feedback_keyboard()
     
     if no_info_msg in response:
-        # Если информации нет, добавляем инлайн-кнопку для прямой связи с HR
-        builder = InlineKeyboardBuilder()
-        builder.button(text="👤 Связаться с HR", callback_data="contact_hr")
-        builder.button(text="🔙 В главное меню", callback_data="back_to_main")
-        builder.adjust(1)
-        reply_markup = builder.as_markup()
+        # Если информации нет, используем стандартную клавиатуру, так как там уже есть все нужные кнопки
+        reply_markup = get_feedback_keyboard()
 
     # Send answer to user
     try:
