@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from aiogram import Bot, Dispatcher, types, F, BaseMiddleware
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.utils.chat_action import ChatActionSender
 import config
 from rag_engine import ask_gemini, get_categories, get_subcategories
 
@@ -223,14 +224,13 @@ async def fersol_menu_handler(message: types.Message):
 
 @dp.message(F.text)
 async def chat_handler(message: types.Message):
-    # Show typing status
-    await bot.send_chat_action(message.chat.id, "typing")
-    
     user_query = message.text
     
     # Run synchronous LLM call in a thread pool to avoid blocking the bot
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(executor, ask_gemini, user_query)
+    # Show typing status continuously while waiting
+    async with ChatActionSender.typing(bot=bot, chat_id=message.chat.id):
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(executor, ask_gemini, user_query)
     
     # Проверяем, содержит ли ответ фразу о нехватке информации
     no_info_msg = "К сожалению, у меня нет информации по этому вопросу"
