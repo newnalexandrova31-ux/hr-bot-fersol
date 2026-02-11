@@ -113,6 +113,9 @@ def clean_markdown_formatting(text):
     # Replace list markers * or - with •
     text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
     
+    # Fix specific typos
+    text = text.replace("отпукс", "отпуск")
+    
     return text
 
 def ask_gemini(question):
