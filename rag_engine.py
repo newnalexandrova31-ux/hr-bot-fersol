@@ -101,6 +101,20 @@ def get_context():
         _KNOWLEDGE_CACHE = load_all_knowledge()
     return _KNOWLEDGE_CACHE
 
+def clean_markdown_formatting(text):
+    """
+    Cleans up inconsistent Markdown formatting from LLM response.
+    - Replaces headers (###) with bold text.
+    - Replaces asterisks (*) or dashes (-) in lists with bullets (•).
+    """
+    # Replace headers ### Title with **Title**
+    text = re.sub(r'^#+\s*(.+)$', r'**\1**', text, flags=re.MULTILINE)
+    
+    # Replace list markers * or - with •
+    text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
+    
+    return text
+
 def ask_gemini(question):
     """
     Sends question with the FULL context to Gemini.
