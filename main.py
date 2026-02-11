@@ -96,7 +96,8 @@ def get_feedback_keyboard():
     builder.button(text="👍 Помогло", callback_data="feedback_up")
     builder.button(text="👎 Не помогло", callback_data="feedback_down")
     builder.button(text="👤 Спросить HR", callback_data="contact_hr")
-    builder.adjust(2)
+    builder.button(text="🔙 В меню", callback_data="back_to_main")
+    builder.adjust(2, 2)
     return builder.as_markup()
 
 @dp.message(F.text.regexp(r"(?i)^(привет|здравствуй|hello|hi|меню|start)"))
