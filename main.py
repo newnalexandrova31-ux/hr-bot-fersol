@@ -107,8 +107,12 @@ async def greeting_handler(message: types.Message):
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     await message.answer(
-        f"👋 Здравствуйте, {message.from_user.first_name}!\n\n"
-        "Я — виртуальный ассистент компании Fersol и готов предоставить информацию по меню ниже.",
+        f"👋 Здравствуйте, {message.from_user.first_name}! Я — виртуальный ассистент компании Ферсол.\n\n"
+        "Я помогу Вам найти информацию о регламентах, процедурах и корпоративных политиках.\n\n"
+        "**Как я могу помочь:**\n"
+        "1. Выберите интересующий раздел в меню ниже.\n"
+        "2. Или просто напишите свой вопрос текстом (например: 'Как оформить отпуск?').\n\n"
+        "Что Вас интересует сейчас?",
         reply_markup=get_main_menu_keyboard(),
         parse_mode="Markdown"
     )
