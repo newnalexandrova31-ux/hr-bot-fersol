@@ -140,7 +140,7 @@ async def help_handler(message: types.Message):
 async def contact_hr_handler(callback: types.CallbackQuery):
     await callback.message.edit_reply_markup(reply_markup=None) # Удаляем кнопки, чтобы не нажимали повторно
     await callback.message.answer(
-        "📧 Для связи с HR-отделом напишите на почту: `hr@fersol.ru`\n"
+        "📧 Для связи с HR-отделом напишите на почту: `t.suponina@fersol.ru`\n"
         "Или обратитесь к Татьяне Супониной через личные сообщения."
     )
     await callback.answer()
