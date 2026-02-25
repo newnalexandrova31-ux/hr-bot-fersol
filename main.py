@@ -179,9 +179,12 @@ async def category_callback_handler(callback: types.CallbackQuery):
     category = callback.data.replace("cat_", "")
     
     if "1. О Ферсол" in category:
+        await callback.message.edit_text("⏳ Загружаю подменю...")
+        loop = asyncio.get_event_loop()
+        submenu_markup = await loop.run_in_executor(executor, get_fersol_submenu)
         await callback.message.edit_text(
-            "📂 Выберите интересующий подраздел:",
-            reply_markup=get_fersol_submenu()
+            "📂 Выберите интересующий Вас подраздел:",
+            reply_markup=submenu_markup
         )
     else:
         # Для остальных категорий запрашиваем краткое описание у ИИ
