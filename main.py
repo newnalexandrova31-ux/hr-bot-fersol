@@ -179,9 +179,12 @@ async def category_callback_handler(callback: types.CallbackQuery):
     category = callback.data.replace("cat_", "")
     
     if "1. О Ферсол" in category:
-        await callback.message.edit_text("⏳ Загружаю подменю...")
-        loop = asyncio.get_event_loop()
-        submenu_markup = await loop.run_in_executor(executor, get_fersol_submenu)
+        # Show typing status while generating the submenu in the background
+        async with ChatActionSender.typing(bot=bot, chat_id=callback.message.chat.id):
+            loop = asyncio.get_event_loop()
+            submenu_markup = await loop.run_in_executor(executor, get_fersol_submenu)
+        
+        # Edit the message with the new submenu
         await callback.message.edit_text(
             "📂 Выберите интересующий Вас подраздел:",
             reply_markup=submenu_markup
