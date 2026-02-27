@@ -55,10 +55,10 @@ def get_main_menu_keyboard():
     return builder.as_markup()
 
 def get_fersol_submenu():
-    subcats = get_subcategories("1. О Ферсол")
+    # DEBUG: Using a hardcoded menu to isolate the problem.
     builder = InlineKeyboardBuilder()
-    for sub in subcats:
-        builder.button(text=sub, callback_data=f"sub_{sub}")
+    builder.button(text="Тест 1: О компании", callback_data="sub_О компании Ферсол")
+    builder.button(text="Тест 2: Дресс-код", callback_data="sub_Дресс-код")
     builder.button(text="🔙 Назад в меню", callback_data="back_to_main")
     builder.adjust(1)
     return builder.as_markup()
