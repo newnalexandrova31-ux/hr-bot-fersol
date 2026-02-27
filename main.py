@@ -176,19 +176,35 @@ async def back_to_main_handler(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("cat_"))
 async def category_callback_handler(callback: types.CallbackQuery):
+    logging.info(f"Handling callback: {callback.data}")
     category = callback.data.replace("cat_", "")
     
     if "1. О Ферсол" in category:
-        # Show typing status while generating the submenu in the background
-        async with ChatActionSender.typing(bot=bot, chat_id=callback.message.chat.id):
-            loop = asyncio.get_event_loop()
-            submenu_markup = await loop.run_in_executor(executor, get_fersol_submenu)
-        
-        # Edit the message with the new submenu
-        await callback.message.edit_text(
-            "📂 Выберите интересующий Вас подраздел:",
-            reply_markup=submenu_markup
-        )
+        logging.info("Category '1. О Ферсол' selected. Generating submenu...")
+        try:
+            # Show typing status while the background task is running
+            async with ChatActionSender.typing(bot=bot, chat_id=callback.message.chat.id):
+                loop = asyncio.get_event_loop()
+                submenu_markup = await loop.run_in_executor(executor, get_fersol_submenu)
+                logging.info(f"Submenu generated. Markup is present: {bool(submenu_markup)}")
+
+            # Check if the generated keyboard is not empty
+            if submenu_markup and getattr(submenu_markup, 'inline_keyboard', []):
+                await callback.message.edit_text(
+                    "📂 Выберите интересующий Вас подраздел:",
+                    reply_markup=submenu_markup
+                )
+                logging.info("Successfully displayed submenu for '1. О Ферсол'.")
+            else:
+                logging.warning("Submenu generation for '1. О Ферсол' resulted in an empty or invalid keyboard.")
+                await callback.message.edit_text(
+                    "Не удалось загрузить подменю. Пожалуйста, попробуйте вернуться в главное меню.", 
+                    reply_markup=get_main_menu_keyboard() # Show main menu to allow user to navigate away
+                )
+
+        except Exception as e:
+            logging.error(f"Failed to handle '1. О Ферсол' callback: {e}", exc_info=True)
+            await callback.message.answer("Произошла ошибка при обработке Вашего запроса. Мы уже работаем над этим.")
     else:
         # Для остальных категорий запрашиваем краткое описание у ИИ
         prompt = f"Расскажи мне подробно про '{category}' как сотруднику. Какие здесь действуют правила и процедуры?"
