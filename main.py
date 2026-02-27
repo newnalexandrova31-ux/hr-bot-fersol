@@ -54,15 +54,6 @@ def get_main_menu_keyboard():
     builder.adjust(1) # Инлайн кнопки лучше смотрятся в один столбец, если названия длинные
     return builder.as_markup()
 
-def get_fersol_submenu():
-    # DEBUG: Using a hardcoded menu to isolate the problem.
-    builder = InlineKeyboardBuilder()
-    builder.button(text="Тест 1: О компании", callback_data="sub_О компании Ферсол")
-    builder.button(text="Тест 2: Дресс-код", callback_data="sub_Дресс-код")
-    builder.button(text="🔙 Назад в меню", callback_data="back_to_main")
-    builder.adjust(1)
-    return builder.as_markup()
-
 # Simple Rate Limiting Middleware
 class RateLimitMiddleware(BaseMiddleware):
     def __init__(self, limit: int = 5, window: int = 60):
@@ -179,75 +170,18 @@ async def category_callback_handler(callback: types.CallbackQuery):
     logging.info(f"Handling callback: {callback.data}")
     category = callback.data.replace("cat_", "")
     
-    if "1. О Ферсол" in category:
-        logging.info("Category '1. О Ферсол' selected. Generating submenu...")
-        try:
-            # Show typing status while the background task is running
-            async with ChatActionSender.typing(bot=bot, chat_id=callback.message.chat.id):
-                loop = asyncio.get_event_loop()
-                submenu_markup = await loop.run_in_executor(executor, get_fersol_submenu)
-                logging.info(f"Submenu generated. Markup is present: {bool(submenu_markup)}")
-
-            # Check if the generated keyboard is not empty
-            if submenu_markup and getattr(submenu_markup, 'inline_keyboard', []):
-                await callback.message.edit_text(
-                    "📂 Выберите интересующий Вас подраздел:",
-                    reply_markup=submenu_markup
-                )
-                logging.info("Successfully displayed submenu for '1. О Ферсол'.")
-            else:
-                logging.warning("Submenu generation for '1. О Ферсол' resulted in an empty or invalid keyboard.")
-                await callback.message.edit_text(
-                    "Не удалось загрузить подменю. Пожалуйста, попробуйте вернуться в главное меню.", 
-                    reply_markup=get_main_menu_keyboard() # Show main menu to allow user to navigate away
-                )
-
-        except Exception as e:
-            logging.error(f"Failed to handle '1. О Ферсол' callback: {e}", exc_info=True)
-            await callback.message.answer("Произошла ошибка при обработке Вашего запроса. Мы уже работаем над этим.")
-    else:
-        # Для остальных категорий запрашиваем краткое описание у ИИ
-        prompt = f"Расскажи мне подробно про '{category}' как сотруднику. Какие здесь действуют правила и процедуры?"
-        await callback.message.edit_text("⏳ Загружаю информацию...")
-        
+    prompt = f"Расскажи мне подробно про '{category}' как сотруднику. Какие здесь действуют правила и процедуры?"
+    
+    async with ChatActionSender.typing(bot=bot, chat_id=callback.message.chat.id):
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(executor, ask_gemini, prompt)
-        
-        try:
-            await callback.message.edit_text(response, parse_mode="Markdown", reply_markup=get_feedback_keyboard())
-        except Exception:
-            await callback.message.edit_text(response, reply_markup=get_feedback_keyboard())
+    
+    try:
+        await callback.message.edit_text(response, parse_mode="Markdown", reply_markup=get_feedback_keyboard())
+    except Exception:
+        await callback.message.edit_text(response, reply_markup=get_feedback_keyboard())
             
     await callback.answer()
-
-@dp.callback_query(F.data.startswith("sub_"))
-async def subcategory_callback_handler(callback: types.CallbackQuery):
-    subcategory = callback.data.replace("sub_", "")
-    await callback.message.edit_text(f"⏳ Ищу информацию по теме: {subcategory}...")
-    
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(executor, ask_gemini, subcategory)
-    
-    # Для подразделов "О Ферсол" не показываем кнопки фидбека по просьбе пользователя
-    try:
-        await callback.message.edit_text(response, parse_mode="Markdown")
-    except Exception:
-        await callback.message.edit_text(response)
-    
-    # Добавляем кнопку возврата в меню после ответа
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🔙 Назад в меню", callback_data="back_to_main")
-    await callback.message.answer("Вы можете вернуться в главное меню или задать другой вопрос:", reply_markup=builder.as_markup())
-    
-    await callback.answer()
-
-@dp.message(F.text == "🔙 Назад")
-async def back_handler(message: types.Message):
-    await start_handler(message)
-
-@dp.message(lambda msg: "1. О Ферсол" in msg.text)
-async def fersol_menu_handler(message: types.Message):
-    await message.answer("📂 Выберите интересующий подраздел:", reply_markup=get_fersol_submenu())
 
 @dp.message(F.text)
 async def chat_handler(message: types.Message):
